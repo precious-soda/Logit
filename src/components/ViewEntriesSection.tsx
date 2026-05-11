@@ -1,7 +1,12 @@
 import {
     View, Text, FlatList, ScrollView,
-    ActivityIndicator, StyleSheet
+    ActivityIndicator, StyleSheet, Alert, TouchableOpacity
   } from 'react-native';
+  import * as FileSystem from 'expo-file-system/next';
+  import * as Sharing from 'expo-sharing';
+  import XLSX from 'xlsx';
+  import { getAllEntries } from '../db/database';
+
   
   type Props = {
     fields: any[];
@@ -9,15 +14,97 @@ import {
     onLoadMore: () => void;
     hasMore: boolean;
     loadingMore: boolean;
+    formId: number;
   };
   
   const COL_WIDTH = 120;
   const TIME_COL_WIDTH = 90;
   
   export default function ViewEntriesSection({
-    fields, rows, onLoadMore, hasMore, loadingMore
+    fields, rows, onLoadMore, hasMore, loadingMore, formId
   }: Props) {
   
+  const handleExport = async () => {
+    try {
+      const { fields: allFields, rows: allRows } =
+        await getAllEntries(formId);
+
+      // Create header row
+      const headers = [
+        ...allFields.map((f: any) => f.label),
+        'Saved At',
+      ];
+
+      // Create data rows
+      const excelData = allRows.map((row: any) => [
+        ...allFields.map((_: any, i: number) =>
+          row.values?.[i] ?? ''
+        ),
+        new Date(row.createdAt).toLocaleString('en-IN'),
+      ]);
+
+      // Combine headers + rows
+      const worksheetData = [
+        headers,
+        ...excelData,
+      ];
+
+      // Create worksheet
+      const worksheet =
+        XLSX.utils.aoa_to_sheet(worksheetData);
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        'Entries'
+      );
+
+      // Generate base64 Excel
+      const base64 = XLSX.write(workbook, {
+        type: 'base64',
+        bookType: 'xlsx',
+      });
+
+      const filename =
+        `entries_${formId}_${Date.now()}.xlsx`;
+
+      const file = new FileSystem.File(
+        FileSystem.Paths.cache,
+        filename
+      );
+
+      const binaryString = atob(base64);
+
+      const bytes = new Uint8Array(
+        binaryString.length
+      );
+
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      file.write(bytes);
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        dialogTitle: 'Export Entries',
+        UTI: 'com.microsoft.excel.xlsx',
+      });
+
+    } catch (e) {
+      console.error(e);
+
+      Alert.alert(
+        'Export Failed',
+        'Something went wrong while exporting.'
+      );
+    }
+  };
+
     if (rows.length === 0) {
       return (
         <View style={styles.emptyState}>
@@ -54,9 +141,18 @@ import {
     };
   
     return (
+    <View style={{ flex: 1 }}>
+
+      <View style={styles.toolbar}>
+        <Text style={styles.entryCount}>{rows.length} entries</Text>
+        <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
+          <Text style={styles.exportIcon}>⬇</Text>
+          <Text style={styles.exportText}>Export</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
-  
           <View style={styles.tableHeader}>
             {fields.map((field: any) => (
               <View key={field.id} style={[styles.cell, styles.headerCell, { width: COL_WIDTH }]}>
@@ -67,7 +163,7 @@ import {
               <Text style={styles.headerText}>Saved At</Text>
             </View>
           </View>
-  
+
           <FlatList
             data={rows}
             keyExtractor={(item) => item.entryId.toString()}
@@ -77,9 +173,10 @@ import {
             ListFooterComponent={renderFooter}
             showsVerticalScrollIndicator={false}
           />
-  
         </View>
       </ScrollView>
+
+    </View>
     );
   }
   
@@ -91,6 +188,30 @@ import {
   }
   
   const styles = StyleSheet.create({
+    toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+    entryCount: { fontSize: 13, color: '#888', fontWeight: '500' },
+    exportBtn: {
+      marginLeft: 'auto',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#f0f7ff',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#007bff',
+    },
+    exportIcon: { fontSize: 13, color: '#007bff' },
+    exportText: { fontSize: 13, color: '#007bff', fontWeight: '600' },
     emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
     emptyIcon: { fontSize: 48 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: '#333' },

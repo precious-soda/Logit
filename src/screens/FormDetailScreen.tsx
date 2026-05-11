@@ -10,7 +10,7 @@ type Tab = 'fill' | 'view';
 const LIMIT = 50;
 
 export default function FormDetailScreen({ route, navigation }: any) {
-  const { formId, formName } = route.params;
+  const { formId } = route.params;
   const [activeTab, setActiveTab] = useState<Tab>('fill');
   const [form, setForm] = useState<any>(null);
 
@@ -80,6 +80,7 @@ export default function FormDetailScreen({ route, navigation }: any) {
               onLoadMore={loadMore}
               hasMore={hasMore}
               loadingMore={loadingMore}
+              formId={formId}
             />
         }
       </View>
