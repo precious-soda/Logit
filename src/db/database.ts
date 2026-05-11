@@ -134,3 +134,32 @@ export function getEntries(
 
   return { fields, rows };
 }
+
+export function getAllEntries(formId: number): { fields: any[]; rows: any[] } {
+  const fields = db.getAllSync(
+    'SELECT * FROM fields WHERE form_id = ? ORDER BY field_order',
+    [formId]
+  );
+
+  const entries = db.getAllSync(
+    'SELECT * FROM entry_values_meta WHERE form_id = ? ORDER BY created_at DESC',
+    [formId]
+  );
+
+  const rows = entries.map((entry: any) => {
+    const values = db.getAllSync(
+      'SELECT field_id, value FROM entry_values WHERE entry_id = ?',
+      [entry.id]
+    );
+    const valueMap: Record<number, string> = {};
+    values.forEach((v: any) => { valueMap[v.field_id] = v.value; });
+
+    return {
+      entryId: entry.id,
+      createdAt: entry.created_at,
+      values: fields.map((f: any) => valueMap[f.id] ?? ''),
+    };
+  });
+
+  return { fields, rows };
+}
